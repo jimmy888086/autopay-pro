@@ -1,0 +1,68 @@
+name: Build Android APK
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+      - name: Install deps and build web
+        run: |
+          npm install
+          npm install @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6
+          npx vite build
+      - name: Generate Android project
+        run: |
+          npx cap init "AutoPay Pro" "com.autopaypro.app" --web-dir dist
+          npx cap add android
+          npx cap sync android
+      - name: Set app icons
+        run: |
+          for d in mipmap-mdpi mipmap-hdpi mipmap-xhdpi mipmap-xxhdpi mipmap-xxxhdpi; do
+            if [ -d "android-icons/$d" ]; then
+              cp -f android-icons/$d/* android/app/src/main/res/$d/
+            fi
+          done
+      - name: Set dark theme and status bar
+        run: |
+          cd android/app/src/main/res/values
+          cat > colors.xml << 'COLORS'
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <color name="colorPrimary">#6366f1</color>
+              <color name="colorPrimaryDark">#070b12</color>
+              <color name="colorAccent">#8b5cf6</color>
+              <color name="splash_bg">#070b12</color>
+          </resources>
+          COLORS
+      - name: Force Gradle 8.4
+        run: |
+          cd android
+          cat > gradle/wrapper/gradle-wrapper.properties << 'PROPS'
+          distributionBase=GRADLE_USER_HOME
+          distributionPath=wrapper/dists
+          distributionUrl=https\://services.gradle.org/distributions/gradle-8.4-bin.zip
+          zipStoreBase=GRADLE_USER_HOME
+          zipStorePath=wrapper/dists
+          PROPS
+      - name: Build APK
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AutoPay-Pro-APK
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30
